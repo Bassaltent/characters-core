@@ -1,0 +1,22 @@
+{
+  "id": "nodebb-plugin-characters-core",
+  "name": "Characters Core",
+  "description": "Gestion des modèles de données des personnages",
+  "version": "1.0.0",
+  "library": "./library.js",
+  "hooks": [
+    { "hook": "filter:admin.header.build", "method": "addAdminNavigation" },
+    { "hook": "static:app.load", "method": "init" }
+  ],
+  "staticDirs": {
+    "public": "public"
+  },
+  "admin": {
+    "route": "/characters-core",
+    "icon": "fa-users"
+  },
+  "scripts": [
+    "public/js/admin.js",
+    "public/js/client.js"
+  ]
+}

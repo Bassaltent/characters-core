@@ -1,0 +1,31 @@
+{
+    "name": "nodebb-plugin-characters-core",
+    "version": "1.0.0",
+    "description": "Core plugin for character management in NodeBB",
+    "main": "library.js",
+    "scripts": {
+      "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+      "nodebb",
+      "plugin",
+      "characters",
+      "rpg"
+    ],
+    "author": "Bass",
+    "license": "MIT",
+    "dependencies": {
+      "mongoose": "^5.13.7"
+    },
+    "nbbpm": {
+      "compatibility": "^3.12.0"
+    },
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/yourusername/nodebb-plugin-characters-core.git"
+    },
+    "bugs": {
+      "url": "https://github.com/yourusername/nodebb-plugin-characters-core/issues"
+    },
+    "homepage": "https://github.com/yourusername/nodebb-plugin-characters-core#readme"
+  }
