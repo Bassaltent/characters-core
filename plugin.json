@@ -15,8 +15,13 @@
     "route": "/characters-core",
     "icon": "fa-users"
   },
+  "modules": {
+    "../admin/plugins/characters-core.js": "./public/js/admin.js"
+  },
+  "acpScripts": [
+    "public/lib/acp-main.js"
+  ],
   "scripts": [
-    "public/js/admin.js",
-    "public/js/client.js"
+    "public/lib/main.js"
   ]
 }
