@@ -15,9 +15,11 @@ CharactersCore.init = async function (params) {
 
     // Routes API
     router.get('/api/characters-core/models', getCharacterModels);
+    router.get('/api/characters-core/models/:modelId', getCharacterModel);
     router.post('/api/characters-core/models', middleware.applyCSRF, createCharacterModel);
     router.put('/api/characters-core/models/:modelId', middleware.applyCSRF, updateCharacterModel);
     router.delete('/api/characters-core/models/:modelId', middleware.applyCSRF, deleteCharacterModel);
+    
 
     winston.info('[plugin/characters-core] Plugin loaded.');
 };
@@ -33,13 +35,24 @@ CharactersCore.addAdminNavigation = async function (header) {
 
 // Rendu de la page d'administration
 async function renderAdminPage(req, res) {
-    res.render('admin/characters-core', {});
+    res.render('admin/plugins/characters-core', {});
 }
 
 // API : Récupérer les modèles de personnages
 async function getCharacterModels(req, res) {
     const models = await db.getObject('characters:models') || {};
     res.json(models);
+}
+
+async function getCharacterModel(req, res) {
+    const { modelId } = req.params;
+    const models = await db.getObject('characters:models');
+    
+    if (!models || !models[modelId]) {
+        return res.status(404).json({ message: 'Model not found' });
+    }
+
+    res.json(models[modelId]);
 }
 
 // API : Créer un nouveau modèle de personnage
@@ -50,7 +63,7 @@ async function createCharacterModel(req, res) {
     const model = {
         id: modelId,
         name,
-        fields,
+        fields: fields || [], // Ajoutez cette correction pour éviter null
     };
 
     await db.setObjectField('characters:models', modelId, model);
