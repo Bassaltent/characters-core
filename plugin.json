@@ -9,7 +9,8 @@
     { "hook": "static:app.load", "method": "init" }
   ],
   "staticDirs": {
-    "public": "public"
+    "public": "public",
+    "src": "src"
   },
   "admin": {
     "route": "/characters-core",
