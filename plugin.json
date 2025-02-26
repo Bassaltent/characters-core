@@ -12,6 +12,9 @@
     "public": "public",
     "src": "src"
   },
+  "css": [
+    "public/css/characters-core.css"
+  ],
   "admin": {
     "route": "/characters-core",
     "icon": "fa-users"

@@ -70,7 +70,11 @@ CharactersCore.init = async function (params) {
     router.post('/api/characters-core/models', middleware.applyCSRF, createCharacterModel);
     router.put('/api/characters-core/models/:modelId', middleware.applyCSRF, updateCharacterModel);
     router.delete('/api/characters-core/models/:modelId', middleware.applyCSRF, deleteCharacterModel);
-    
+
+    router.post('/api/characters-core/models/:modelId/duplicate', middleware.applyCSRF, duplicateCharacterModel);
+
+    // Route pour l'import
+    router.post('/api/characters-core/models/import', middleware.applyCSRF, importCharacterModel);
 
     winston.info('[plugin/characters-core] Plugin loaded.');
 };
@@ -139,6 +143,91 @@ async function deleteCharacterModel(req, res) {
 
     await db.deleteObjectField('characters:models', modelId);
     res.json({ message: 'Model deleted' });
+}
+
+async function duplicateCharacterModel(req, res) {
+    const { modelId } = req.params;
+    const originalModel = await CharactersCore.getModel(modelId);
+    
+    if (!originalModel) {
+        return res.status(404).json({ message: 'Model not found' });
+    }
+
+    const newModelId = `model:${Date.now()}`;
+    const duplicatedModel = {
+        ...originalModel,
+        id: newModelId,
+        name: `Copie de ${originalModel.name}`
+    };
+
+    await db.setObjectField('characters:models', newModelId, duplicatedModel);
+    res.json({ message: 'Model duplicated', model: duplicatedModel });
+}
+
+CharactersCore.cleanModelForImport = function(modelData) {
+    // Liste des champs autorisés dans un modèle
+    const allowedFields = ['name', 'fields'];
+    
+    // Liste des champs autorisés dans un field
+    const allowedFieldProperties = ['name', 'label', 'type', 'properties'];
+    
+    // Liste des propriétés autorisées dans un field
+    const allowedProperties = ['required', 'unique', 'min', 'max'];
+
+    const cleanedModel = {};
+    
+    // Ne garder que les champs autorisés du modèle
+    allowedFields.forEach(field => {
+        if (field in modelData) {
+            cleanedModel[field] = modelData[field];
+        }
+    });
+
+    // Nettoyer les fields
+    if (Array.isArray(cleanedModel.fields)) {
+        cleanedModel.fields = cleanedModel.fields.map(field => {
+            const cleanedField = {};
+            
+            allowedFieldProperties.forEach(prop => {
+                if (prop in field) {
+                    if (prop === 'properties') {
+                        // Ne garder que les propriétés autorisées
+                        cleanedField.properties = {};
+                        allowedProperties.forEach(p => {
+                            if (p in field.properties) {
+                                cleanedField.properties[p] = field.properties[p];
+                            }
+                        });
+                    } else {
+                        cleanedField[prop] = field[prop];
+                    }
+                }
+            });
+            
+            return cleanedField;
+        });
+    }
+
+    return cleanedModel;
+};
+
+async function importCharacterModel(req, res) {
+    try {
+        const modelData = req.body;
+        const cleanedModel = CharactersCore.cleanModelForImport(modelData);
+        
+        const modelId = `model:${Date.now()}`;
+        const newModel = {
+            ...cleanedModel,
+            id: modelId,
+            name: `${cleanedModel.name} (importé)`
+        };
+
+        await db.setObjectField('characters:models', modelId, newModel);
+        res.json({ message: 'Model imported', model: newModel });
+    } catch (error) {
+        res.status(400).json({ message: 'Import failed', error: error.message });
+    }
 }
 
 module.exports = CharactersCore;

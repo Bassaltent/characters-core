@@ -83,9 +83,173 @@ define('admin/plugins/characters-core', ['settings', 'alerts'], function(setting
             });
         });
 
-        $('#modelsContainer, #fieldsContainer').on('click', '.remove-field', function(e) {
+        $('#modelsContainer').on('click', '.toggle-fields', function(e) {
+            const $button = $(this);
+            const $model = $button.closest('.model');
+            
+            // Fermer les autres modèles
+            $('.model').not($model).removeClass('expanded');
+            $('.model').not($model).find('.toggle-fields').removeClass('expanded');
+            
+            // Toggle l'état du modèle courant
+            $model.toggleClass('expanded');
+            $button.toggleClass('expanded');
+        });
+
+        // Gestionnaire global pour la suppression des champs
+        $('#modelsContainer').on('click', '.remove-field', function(e) {
             e.stopPropagation();
-            $(this).closest('.field-row').remove();
+            const $fieldRow = $(this).closest('.field-row');
+            const modelId = $fieldRow.closest('.model').data('id');
+            
+            // Supprimer visuellement
+            $fieldRow.remove();
+
+            // Obtenir tous les champs restants du modèle
+            const fields = [];
+            $(`.model[data-id="${modelId}"] .field-row`).each(function() {
+                fields.push({
+                    name: $(this).attr('data-field-name'),
+                    type: $(this).attr('data-field-type'),
+                    label: {
+                        fr: $(this).attr('data-field-label-fr'),
+                        en: $(this).attr('data-field-label-en')
+                    },
+                    properties: {
+                        required: $(this).attr('data-field-required') === 'true',
+                        unique: $(this).attr('data-field-unique') === 'true',
+                        ref: $(this).attr('data-field-ref') || null
+                    }
+                });
+            });
+
+            // Sauvegarder
+            $.ajax({
+                url: `/api/characters-core/models/${modelId}`,
+                method: 'PUT',
+                data: {
+                    name: $(`.model[data-id="${modelId}"] h4`).text(),
+                    fields: fields
+                },
+                headers: {
+                    'x-csrf-token': config.csrf_token
+                },
+                success: function() {
+                    alerts.alert({
+                        type: 'success',
+                        alert_id: 'field-deleted',
+                        title: 'Succès',
+                        message: 'Champ supprimé avec succès',
+                        timeout: 2000
+                    });
+                },
+                error: function() {
+                    alerts.alert({
+                        type: 'error',
+                        alert_id: 'field-delete-error',
+                        title: 'Erreur',
+                        message: 'Erreur lors de la suppression du champ',
+                        timeout: 2000
+                    });
+                    loadModels(); // Recharger en cas d'erreur
+                }
+            });
+        });
+
+        $('#modelsContainer').on('click', '.duplicate-model', function() {
+            const modelId = $(this).data('id');
+            
+            $.ajax({
+                url: `/api/characters-core/models/${modelId}/duplicate`,
+                method: 'POST',
+                headers: {
+                    'x-csrf-token': config.csrf_token
+                },
+                success: function(response) {
+                    alerts.alert({
+                        type: 'success',
+                        alert_id: 'model-duplicated',
+                        title: 'Succès',
+                        message: 'Modèle dupliqué avec succès',
+                        timeout: 2000
+                    });
+                    loadModels();
+                },
+                error: function() {
+                    alerts.alert({
+                        type: 'error',
+                        alert_id: 'model-duplicate-error',
+                        title: 'Erreur',
+                        message: 'Erreur lors de la duplication du modèle',
+                        timeout: 2000
+                    });
+                }
+            });
+        });
+        
+        // Handler pour l'import
+        $('#importModel').on('click', function() {
+            require(['bootbox'], function(bootbox) {
+                bootbox.dialog({
+                    title: 'Importer un modèle',
+                    message: `
+                        <div class="form-group">
+                            <label>Choisir un fichier JSON</label>
+                            <input type="file" class="form-control" id="fileInput" accept=".json">
+                        </div>
+                        <div class="form-group">
+                            <label>Ou coller le contenu JSON</label>
+                            <textarea class="form-control" id="jsonInput" rows="10"></textarea>
+                        </div>
+                    `,
+                    buttons: {
+                        cancel: {
+                            label: 'Annuler',
+                            className: 'btn-default'
+                        },
+                        import: {
+                            label: 'Importer',
+                            className: 'btn-primary',
+                            callback: function() {
+                                const fileInput = $('#fileInput')[0];
+                                const jsonInput = $('#jsonInput').val();
+        
+                                if (fileInput.files.length > 0) {
+                                    const reader = new FileReader();
+                                    reader.onload = function(e) {
+                                        try {
+                                            const modelData = parseModelInput(e.target.result);
+                                            importModel(modelData);
+                                        } catch (error) {
+                                            alerts.alert({
+                                                type: 'error',
+                                                alert_id: 'model-import-error',
+                                                title: 'Erreur',
+                                                message: error.message,
+                                                timeout: 2000
+                                            });
+                                        }
+                                    };
+                                    reader.readAsText(fileInput.files[0]);
+                                } else if (jsonInput) {
+                                    try {
+                                        const modelData = parseModelInput(jsonInput);
+                                        importModel(modelData);
+                                    } catch (error) {
+                                        alerts.alert({
+                                            type: 'error',
+                                            alert_id: 'model-import-error',
+                                            title: 'Erreur',
+                                            message: error.message,
+                                            timeout: 2000
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            });
         });
     }
 
@@ -96,24 +260,26 @@ define('admin/plugins/characters-core', ['settings', 'alerts'], function(setting
             const modelsArray = Object.values(data).map(model => {
                 // Créer une représentation HTML des champs
                 const fieldsHtml = Array.isArray(model.fields) ? 
-                    model.fields.map(field => `
-                        <div class="field-row mb-2" 
-                            data-field-name="${field.name}"
-                            data-field-type="${field.type}"
-                            data-field-label-fr="${field.label?.fr || ''}"
-                            data-field-label-en="${field.label?.en || ''}"
-                            data-field-required="${field.properties?.required || false}"
-                            data-field-unique="${field.properties?.unique || false}"
-                            data-field-ref="${field.properties?.ref || ''}">
-                            <span class="field-info">
-                                ${field.label?.fr || field.name} (${field.type})
-                                ${field.properties?.required ? '*' : ''}
-                                ${field.properties?.unique ? '[U]' : ''}
-                            </span>
-                            <button type="button" class="btn btn-sm btn-primary edit-field" data-field-id="${field.name}">Éditer</button>
-                            <button type="button" class="btn btn-sm btn-danger remove-field" data-field-id="${field.name}">Supprimer</button>
-                        </div>
-                    `).join('') : '';
+                    `<div class="field-list">
+                        ${model.fields.map((field, index) => `
+                            <div class="field-row mb-2 ${index >= 3 ? 'collapsed-field' : ''}" 
+                                data-field-name="${field.name}"
+                                data-field-type="${field.type}"
+                                data-field-label-fr="${field.label?.fr || ''}"
+                                data-field-label-en="${field.label?.en || ''}"
+                                data-field-required="${field.properties?.required || false}"
+                                data-field-unique="${field.properties?.unique || false}"
+                                data-field-ref="${field.properties?.ref || ''}">
+                                <span class="field-info">
+                                    ${field.label?.fr || field.name} (${field.type})
+                                    ${field.properties?.required ? '*' : ''}
+                                    ${field.properties?.unique ? '[U]' : ''}
+                                </span>
+                                <button type="button" class="btn btn-sm btn-primary edit-field" data-field-id="${field.name}">Éditer</button>
+                                <button type="button" class="btn btn-sm btn-danger remove-field" data-field-id="${field.name}">Supprimer</button>
+                            </div>
+                        `).join('')}
+                    </div>` : '';
     
                 return {
                     ...model,
@@ -161,6 +327,36 @@ define('admin/plugins/characters-core', ['settings', 'alerts'], function(setting
                     title: 'Erreur',
                     message: 'Erreur lors de la création du modèle',
                     timeout: 2000,
+                });
+            }
+        });
+    }
+
+    function importModel(modelData) {
+        $.ajax({
+            url: '/api/characters-core/models/import',
+            method: 'POST',
+            data: modelData,
+            headers: {
+                'x-csrf-token': config.csrf_token
+            },
+            success: function(response) {
+                alerts.alert({
+                    type: 'success',
+                    alert_id: 'model-imported',
+                    title: 'Succès',
+                    message: 'Modèle importé avec succès',
+                    timeout: 2000
+                });
+                loadModels();
+            },
+            error: function(err) {
+                alerts.alert({
+                    type: 'error',
+                    alert_id: 'model-import-error',
+                    title: 'Erreur',
+                    message: 'Erreur lors de l\'import du modèle',
+                    timeout: 2000
                 });
             }
         });
@@ -237,6 +433,64 @@ define('admin/plugins/characters-core', ['settings', 'alerts'], function(setting
                 dialog.on('shown.bs.modal', function() {
                     $('#addFieldBtn').on('click', function() {
                         showFieldEditModal(null);
+                    });
+                
+                    // Ajouter ceci :
+                    $('#fieldsContainer').on('click', '.remove-field', function(e) {
+                        e.stopPropagation();
+                        $(this).closest('.field-row').remove();
+                        
+                        // Sauvegarder immédiatement les changements
+                        const fields = [];
+                        $('#fieldsContainer .field-row').each(function() {
+                            fields.push({
+                                name: $(this).attr('data-field-name'),
+                                type: $(this).attr('data-field-type'),
+                                label: {
+                                    fr: $(this).attr('data-field-label-fr'),
+                                    en: $(this).attr('data-field-label-en')
+                                },
+                                properties: {
+                                    required: $(this).attr('data-field-required') === 'true',
+                                    unique: $(this).attr('data-field-unique') === 'true',
+                                    ref: $(this).attr('data-field-ref') || null
+                                }
+                            });
+                        });
+                    
+                        $.ajax({
+                            url: `/api/characters-core/models/${modelId}`,
+                            method: 'PUT',
+                            data: {
+                                name: $('#modelName').val(),
+                                fields: fields
+                            },
+                            headers: {
+                                'x-csrf-token': config.csrf_token
+                            },
+                            success: function() {
+                                alerts.alert({
+                                    type: 'success',
+                                    alert_id: 'field-deleted',
+                                    title: 'Succès',
+                                    message: 'Champ supprimé avec succès',
+                                    timeout: 2000
+                                });
+                                // On ne recharge pas la page pour ne pas fermer la modale
+                                // mais on met à jour l'affichage si nécessaire
+                            },
+                            error: function() {
+                                alerts.alert({
+                                    type: 'error',
+                                    alert_id: 'field-delete-error',
+                                    title: 'Erreur',
+                                    message: 'Erreur lors de la suppression du champ',
+                                    timeout: 2000
+                                });
+                                // Potentiellement recharger les champs en cas d'erreur
+                                loadModels();
+                            }
+                        });
                     });
                 });
             });
@@ -425,6 +679,62 @@ define('admin/plugins/characters-core', ['settings', 'alerts'], function(setting
                 });
             }
         });
+    }
+
+
+    function convertMongooseType(mongooseType) {
+        const typeMapping = {
+            'String': 'string',
+            'Number': 'number',
+            'Array': 'array',
+            'Object': 'object',
+            'mongoose.Schema.Types.ObjectId': 'reference'
+        };
+        
+        return typeMapping[mongooseType] || 'string';
+    }
+    
+    function parseModelInput(input) {
+        try {
+            // D'abord essayer de parser comme JSON standard
+            return JSON.parse(input);
+        } catch (e) {
+            try {
+                // Si ce n'est pas du JSON, essayer de parser comme un schéma Mongoose
+                const mongooseSchema = input;
+                
+                // Convertir le schéma Mongoose en notre format
+                const fields = [];
+                
+                // Regex pour extraire les définitions de champs
+                const schemaRegex = /(\w+):\s*{\s*type:\s*(\w+)(?:,\s*required:\s*(true|false))?(?:,\s*unique:\s*(true|false))?/g;
+                let match;
+                
+                while ((match = schemaRegex.exec(mongooseSchema)) !== null) {
+                    const [, name, type, required, unique] = match;
+                    
+                    fields.push({
+                        name,
+                        label: {
+                            fr: name.charAt(0).toUpperCase() + name.slice(1),
+                            en: name.charAt(0).toUpperCase() + name.slice(1)
+                        },
+                        type: convertMongooseType(type),
+                        properties: {
+                            required: required === 'true',
+                            unique: unique === 'true'
+                        }
+                    });
+                }
+                
+                return {
+                    name: 'Imported Model',
+                    fields: fields
+                };
+            } catch (e2) {
+                throw new Error('Format non reconnu');
+            }
+        }
     }
 
     function deleteModel(modelId) {
